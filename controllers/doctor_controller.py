@@ -1,6 +1,7 @@
 from flask_restx import Namespace, Resource, fields
 from models.doctor import Doctor
 from models.user import User
+from flask_jwt_extended import create_access_token, get_jwt,jwt_required, get_jwt_identity, decode_token
 
 doctor_ns = Namespace('doctors', description='Opérations sur les médecins')
 
@@ -65,6 +66,29 @@ search_model = doctor_ns.model('SearchParams', {
     'limit': fields.Integer(required=False, default=10, description='Limite de résultats')
 })
 
+search_model_specialite = doctor_ns.model('SearchpSecialiteParams', {
+    'specialty': fields.String(required=False, description='Spécialité médicale'),
+    'limit': fields.Integer(required=False, default=10, description='Limite de résultats')
+})
+
+@doctor_ns.route('/search/specialite')
+class DoctorSearchSpecialite(Resource):
+    @jwt_required()
+    @doctor_ns.expect(search_model_specialite)
+    #@doctor_ns.marshal_list_with(doctor_model)
+    def post(self):
+        current_user_id = get_jwt_identity()
+        """Recherche de médecins avec filtres"""
+        params = doctor_ns.payload
+        
+        results = Doctor.search_specialite(
+            specialty=params.get('specialty'),
+            user_id=current_user_id,
+            limit=params.get('limit', 10)
+        )
+        
+        
+        return results
 @doctor_ns.route('/search')
 class DoctorSearch(Resource):
     @doctor_ns.expect(search_model)
@@ -78,11 +102,6 @@ class DoctorSearch(Resource):
             name=params.get('name'),
             limit=params.get('limit', 10)
         )
-        
-        # Conversion des ObjectId en strings
-        for doc in results:
-            doc['_id'] = str(doc['_id'])
-        
         return results
     
 @doctor_ns.route('/')

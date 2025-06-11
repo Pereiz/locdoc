@@ -40,20 +40,20 @@ register_model = auth_ns.model('Register', {
     'longitude': fields.Float(required=False, example=2.3522),
     'latitude': fields.Float(required=False, example=48.8566)
 })
-register_model1 = auth_ns.model('Register', {
-    'email': fields.String(required=True, example='patient@locdoc.com'),
-    'username' :fields.String(required=True, example='azonvidé'),
-    'password': fields.String(required=True, example='MotDePasseSecure123!'),
-    'first_name': fields.String(required=True, example='Gbèto'),
-    'last_name': fields.String(required=True, example='YENONMON'),
-    'date_naissance' : fields.String(required=True, example='01/10/1990'),
-    'sexe' : fields.String(required=True, enum=['F','M'], example='M'),
-    'telephone' : fields.String(required=True, description='Numéro de téléphone', example='0110111214'),
-    'role': fields.List(fields.String(required=True, enum=['patient'], example='patient')),
-    'address': fields.Nested(address_model, required=True),
-    'longitude': fields.Float(required=False, example=2.3522),
-    'latitude': fields.Float(required=False, example=48.8566)
-})
+# register_model1 = auth_ns.model('Register', {
+#     'email': fields.String(required=True, example='patient@locdoc.com'),
+#     'username' :fields.String(required=True, example='azonvidé'),
+#     'password': fields.String(required=True, example='MotDePasseSecure123!'),
+#     'first_name': fields.String(required=True, example='Gbèto'),
+#     'last_name': fields.String(required=True, example='YENONMON'),
+#     'date_naissance' : fields.String(required=True, example='01/10/1990'),
+#     'sexe' : fields.String(required=True, enum=['F','M'], example='M'),
+#     'telephone' : fields.String(required=True, description='Numéro de téléphone', example='0110111214'),
+#     'role': fields.List(fields.String(required=True, enum=['patient'], example='patient')),
+#     'address': fields.Nested(address_model, required=True),
+#     'longitude': fields.Float(required=False, example=2.3522),
+#     'latitude': fields.Float(required=False, example=48.8566)
+# })
 
 reset_request_model = auth_ns.model('ResetRequest', {
     'email': fields.String(required=True, example='patient@locdoc.com')

@@ -37,29 +37,229 @@ class Doctor:
             'created_at': datetime.utcnow()
         }).inserted_id
 
+    # @staticmethod
+    # def search(specialty=None, name=None, limit=10):
+    #     """
+    #     Recherche de médecins avec filtres
+    #     :param specialty: Spécialité médicale (optionnel)
+    #     :param name: Nom ou partie du nom (optionnel)
+    #     :param limit: Nombre max de résultats
+    #     :return: Liste de médecins correspondants
+    #     """
+    #     query = {}
+        
+    #     if specialty:
+    #         query['specialties'] = {'$in': [specialty]}
+        
+    #     if name:
+    #         query['$or'] = [
+    #             {'first_name': {'$regex': name, '$options': 'i'}},
+    #             {'last_name': {'$regex': name, '$options': 'i'}}
+    #         ]
+        
+    #     return list(Doctor._get_collection().find(query).limit(limit))
+    
+
     @staticmethod
     def search(specialty=None, name=None, limit=10):
         """
-        Recherche de médecins avec filtres
+        Recherche de médecins avec filtres combinant les collections doctor et user
         :param specialty: Spécialité médicale (optionnel)
-        :param name: Nom ou partie du nom (optionnel)
+        :param name: Nom ou partie du nom (optionnel) - recherche dans user
         :param limit: Nombre max de résultats
-        :return: Liste de médecins correspondants
+        :return: Liste de médecins avec leurs informations utilisateur
         """
-        query = {}
+        # Étape 1: Construire le pipeline d'agrégation
+        pipeline = []
         
+        # Filtre par spécialité si fournie
         if specialty:
-            query['specialties'] = {'$in': [specialty]}
+            pipeline.append({
+                '$match': {
+                    'specialties': {'$in': [specialty]}
+                }
+            })
         
+        # Jointure avec la collection user
+        pipeline.append({
+            '$lookup': {
+                'from': 'users',
+                'localField': 'user_id',  # Le champ dans doctor qui référence user
+                'foreignField': '_id',    # Le champ _id dans user
+                'as': 'user_info'
+            }
+        })
+        
+        # Déplier le tableau user_info (résultat de la jointure)
+        pipeline.append({'$unwind': '$user_info'})
+        
+        # Filtre par nom si fourni (recherche dans user_info)
         if name:
-            query['$or'] = [
-                {'first_name': {'$regex': name, '$options': 'i'}},
-                {'last_name': {'$regex': name, '$options': 'i'}}
-            ]
+            pipeline.append({
+                '$match': {
+                    '$or': [
+                        {'user_info.first_name': {'$regex': name, '$options': 'i'}},
+                        {'user_info.last_name': {'$regex': name, '$options': 'i'}}
+                    ]
+                }
+            })
         
-        return list(Doctor._get_collection().find(query).limit(limit))
-    
+        # Limiter les résultats
+        pipeline.append({'$limit': limit})
+        
+        # Projection pour formater le résultat
+        pipeline.append({
+            '$project': {
+                'specialties': 1,
+                'user_info.first_name': 1,
+                'user_info.last_name': 1,
+                'user_info.email': 1,
+                'user_info.telephone': 1,
+                # Ajoutez ici d'autres champs nécessaires
+            }
+        })
+        
+        # Étape 2: Exécuter l'agrégation
+        try:
+            doctors = list(Doctor._get_collection().aggregate(pipeline))
+            
+            # Formater les résultats pour une meilleure structure
+            formatted_results = []
+            for doc in doctors:
+                formatted = {
+                    'doctor_id': str(doc['_id']),
+                    'specialties': doc.get('specialties', []),
+                    'user_info': {
+                        'first_name': doc['user_info']['first_name'],
+                        'last_name': doc['user_info']['last_name'],
+                        'email': doc['user_info']['email'],
+                        'telephone': doc['user_info']['telephone']
+                    }
+                }
+                formatted_results.append(formatted)
+            
+            return formatted_results
+        
+        except Exception as e:
+            current_app.logger.error(f"Erreur recherche médecins: {str(e)}")
+            raise RuntimeError("Erreur lors de la recherche des médecins")
 
+    @staticmethod
+    def search_specialite(specialty=None, user_id=None, radius_km=10, limit=10):
+        """
+        Recherche de médecins par spécialité dans un rayon donné autour d'un utilisateur
+        """
+        if not specialty:
+            raise ValueError("La spécialité doit être fournie")
+        
+        if not user_id:
+            raise ValueError("L'ID de l'utilisateur doit être fourni")
+
+        try:
+            # Récupérer les coordonnées de l'utilisateur
+            from models.user import User
+            if not isinstance(user_id, ObjectId):
+                user_id = ObjectId(str(user_id))
+            user = User.find_by_id(user_id)
+            if not user:
+                raise ValueError("Utilisateur introuvable")
+            # if not user.get('location'):
+            #     raise ValueError("L'utilisateur n'a pas de position géographique enregistrée")
+            
+            longitude, latitude = user['location']['coordinates']
+            
+            # Convertir le rayon en radians (nécessaire pour $centerSphere)
+            radius_radians = radius_km / 6378.1  # 6378.1 est le rayon moyen de la Terre en km
+
+            pipeline = [
+                # Étape 1: Filtrer par spécialité
+                {'$match': {'specialties': {'$in': [specialty]}}},
+                
+                # Étape 2: Jointure avec la collection user
+                {'$lookup': {
+                    'from': 'users',
+                    'localField': 'user_id',
+                    'foreignField': '_id',
+                    'as': 'user_info'
+                }},
+                
+                # Étape 3: Déplier le tableau user_info
+                {'$unwind': '$user_info'},
+                
+                # Étape 4: Filtrer par distance géographique avec $geoWithin
+                {'$match': {
+                    'user_info.location': {
+                        '$geoWithin': {
+                            '$centerSphere': [
+                                [longitude, latitude],
+                                radius_radians
+                            ]
+                        }
+                    }
+                }},
+                
+                # Étape 5: Exclure l'utilisateur lui-même
+                {'$match': {
+                    'user_info._id': {'$ne': user_id}
+                }},
+                
+                # Étape 6: Calculer la distance en km
+                {'$addFields': {
+                    'distance_km': {
+                        '$multiply': [
+                            {
+                                '$sqrt': {
+                                    '$add': [
+                                        {'$pow': [{'$subtract': ['$user_info.location.coordinates[0]', longitude]}, 2]},
+                                        {'$pow': [{'$subtract': ['$user_info.location.coordinates[1]', latitude]}, 2]}
+                                    ]
+                                }
+                            },
+                            111.32  # Approximation degrés -> km
+                        ]
+                    }
+                }},
+                
+                # Étape 7: Trier par distance
+                {'$sort': {'distance_km': 1}},
+                
+                # Étape 8: Limiter les résultats
+                {'$limit': limit},
+                
+                # Étape 9: Projection
+                {'$project': {
+                    'specialties': 1,
+                    'user_info.first_name': 1,
+                    'user_info.last_name': 1,
+                    'user_info.telephone': 1,
+                    'user_info.location': 1,
+                    'distance_km': {'$round': ['$distance_km', 2]}
+                }}
+            ]
+
+            doctors = list(Doctor._get_collection().aggregate(pipeline))
+            
+            # Formatage des résultats
+            results = []
+            for doc in doctors:
+                results.append({
+                    'doctor_id': str(doc['_id']),
+                    'specialties': doc.get('specialties', []),
+                    'first_name': doc['user_info']['first_name'],
+                    'last_name': doc['user_info']['last_name'],
+                    'telephone': doc['user_info']['telephone'],
+                    'location': doc['user_info'].get('location'),
+                    'distance_km': doc.get('distance_km', 0)
+                })
+            
+            return results
+
+        except ValueError as ve:
+            raise ve
+        except Exception as e:
+            raise Exception(f"Erreur lors de la recherche de médecins: {str(e)}")
+    
+    
     @staticmethod
     def get_availability(doctor_id):
         """
