@@ -25,7 +25,7 @@ def create_app():
     initialize_extensions(app)
     
     # Vérification de la connexion MongoDB
-    check_mongodb_connection(app)
+    #check_mongodb_connection(app)
 
     
     return app

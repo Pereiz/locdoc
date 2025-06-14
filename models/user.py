@@ -77,10 +77,8 @@ class User:
             }
 
             # Insertion sécurisée
-            #result = User._get_db().insert_one(user_doc)
             result = mongo.db.users.insert_one(user_doc)
             user_id = str(result.inserted_id)
-            # user_id='6847f80e3714ecf817abd484'
 
             # 5. Envoi de l'email de confirmation
             User._send_confirmation_email(email, user_id)
@@ -224,6 +222,34 @@ class User:
 
 
     @staticmethod
+    def deactivate_account(user_id):
+        """
+        Désactive un compte utilisateur
+        Args:
+            user_id: ID de l'utilisateur à désactiver
+        Returns:
+            bool: True si désactivation réussie, False sinon
+        """
+        try:
+            # Conversion sécurisée en ObjectId
+            user_oid = ObjectId(user_id) if not isinstance(user_id, ObjectId) else user_id
+            result = mongo.db.users.update_one(
+                {"_id": user_oid},
+                {"$set": {
+                    "activated": False,
+                    "deactivated_at": datetime.utcnow()
+                }}
+            )
+            return result.modified_count > 0
+        except InvalidId:
+            current_app.logger.error(f"ID utilisateur invalide: {user_id}")
+            return False
+        except Exception as e:
+            current_app.logger.error(f"Erreur désactivation compte: {str(e)}")
+            raise
+
+
+    @staticmethod
     def request_password_reset(email):
         """
         Initie une demande de réinitialisation de mot de passe
@@ -233,7 +259,7 @@ class User:
         user = mongo.db.users.find_one({"email": email, "activated": True})
         
         if not user:
-            current_app.logger.info(f"Password reset request for non-existent email: {email}")
+            current_app.logger.info(f"Requête de mise à jour de mot de passe pour un email inexistant ou non actif: {email}")
             return None
 
         serializer = get_serializer()

@@ -1,7 +1,7 @@
 import os
 from flask import request, jsonify, current_app, url_for
 from flask_restx import Namespace, Resource, fields
-from flask_jwt_extended import create_access_token, get_jwt,jwt_required, get_jwt_identity, decode_token
+from flask_jwt_extended import create_access_token, get_jwt,jwt_required, get_jwt_identity
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import timedelta
 from models.user import User
@@ -82,6 +82,10 @@ user_model = auth_ns.model('User', {
     'role': fields.List(fields.String),
     'telephone': fields.String,
     'created_at': fields.DateTime
+})
+
+deactivate_model = auth_ns.model('DeactivateAccount', {
+    'password': fields.String(required=True, description="Mot de passe actuel")
 })
 
 
@@ -183,6 +187,39 @@ class Login(Resource):
             'role': user['role']
         }, 200
 
+@auth_ns.route('/deactivate-account')
+class DeactivateAccount(Resource):
+    @auth_ns.expect(deactivate_model)
+    @jwt_required()
+    def post(self):
+        """Désactive le compte de l'utilisateur connecté"""
+        try:
+            current_user_id = get_jwt_identity()
+            data = request.get_json()
+
+            # 1. Vérifier le mot de passe
+            user = User.find_by_id(current_user_id)
+            if not user:
+                current_app.logger.warning(f"Utilisateur introuvable ou déjà désactivé: {current_user_id}")
+                return {'message': 'Utilisateur non trouvé ou compte déjà désactivé'}, 404
+
+            if not check_password_hash(user['password'], data['password']):
+                current_app.logger.warning(f"Mot de passe incorrect pour l'utilisateur: {current_user_id}")
+                return {'message': 'Mot de passe incorrect'}, 401
+            
+            # 2. Désactiver le compte
+            if User.deactivate_account(current_user_id):
+                # Invalider le token JWT
+                jti = get_jwt()['jti']
+                blacklist.add(jti)
+                current_app.logger.info(f"Compte désactivé: {current_user_id}")
+                return {'message': 'Compte désactivé avec succès'}, 200
+            
+            return {'message': 'Échec de la désactivation'}, 400
+        except Exception as e:
+            current_app.logger.error(f"Erreur lors de la désactivation: {str(e)}")
+            return {'message': 'Erreur serveur'}, 500
+
 @auth_ns.route('/request-password-reset')
 class PasswordResetRequest(Resource):
     @auth_ns.expect(reset_request_model)
@@ -198,7 +235,7 @@ class PasswordResetRequest(Resource):
             return {'message': 'Si cet email existe, un lien a été envoyé'}, 200
 
         reset_token, user_id = reset_data
-        reset_url = url_for('api.password_reset', token=reset_token, _external=True)
+        reset_url = url_for('auth_password_reset', token=reset_token, _external=True)
         
         try:
             User.send_reset_email(email, reset_url)
@@ -210,6 +247,21 @@ class PasswordResetRequest(Resource):
 
 @auth_ns.route('/reset-password/<token>')
 class PasswordReset(Resource):
+     # Ajoutez cette méthode pour gérer les GET
+    def get(self, token):
+        """Affiche le formulaire de réinitialisation (pour le lien dans l'email)"""
+        # Vérifie d'abord si le token est valide
+        user_id = User.validate_reset_token(token)
+        if not user_id:
+            return {'message': 'Lien invalide ou expiré'}, 400
+        
+        # Retourne une réponse simple ou redirigez vers une page frontend
+        return {
+            'message': 'Token valide',
+            'token': token,
+            'user_id': user_id
+        }, 200
+
     @auth_ns.expect(reset_password_model)
     def post(self, token):
         """Réinitialisation du mot de passe avec token"""
@@ -218,6 +270,10 @@ class PasswordReset(Resource):
         # Validation des mots de passe
         if data['new_password'] != data['confirm_password']:
             return {'message': 'Les mots de passe ne correspondent pas'}, 400
+        
+        is_valid, error_msg = User.validate_password(data['new_password'])
+        if not is_valid:
+            return {"error": error_msg}, 400
         
         # Vérification du token via la couche métier
         user_id = User.validate_reset_token(token)
