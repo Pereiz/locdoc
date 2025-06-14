@@ -1,11 +1,11 @@
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash
-from flask import current_app
+from flask import current_app, url_for, render_template
 from bson import ObjectId  
-from extensions import mongo
-
-
+from extensions import mongo, mail, get_serializer
+from flask_mail import Message
+from itsdangerous import SignatureExpired, BadSignature
 from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderTimedOut
 import certifi  # Pour les connexions SSL sécurisées
@@ -34,22 +34,19 @@ class User:
                date_naissance, last_name, role,
                 address, longitude=None, latitude=None):
         """
-        Crée un nouvel utilisateur avec géolocalisation
-        Args:
-            address: {
-                "street": "123 Rue Exemple",
-                "city": "Paris",
-                "postal_code": "75001",
-                "country": "France"
-            }
-            longitude/latitude: Optionnels (si non fournis, géocodage automatique)
+        Crée un nouvel utilisateur avec géolocalisation et envoie un email de confirmation.
+        L'utilisateur n'est PAS activé tant qu'il ne confirme pas son email.
         """
 
         try:
-            # 1. Géocodage si coordonnées manquantes
+            # Vérifie si l'email existe déjà (évite les doublons)
+            if mongo.db.users.find_one({"email": email}):
+                raise ValueError("Cet email est déjà utilisé.")
+            
+            # Géocodage si coordonnées manquantes
             if not all([longitude, latitude]):
                 geolocator = Nominatim(
-                    user_agent="medlink_app",
+                    user_agent="locdoc_app",
                     ssl_context=certifi.where()  # Sécurité SSL
                 )
                 location = geolocator.geocode(
@@ -59,7 +56,7 @@ class User:
                     raise ValueError("Adresse introuvable")
                 longitude, latitude = location.longitude, location.latitude
 
-            # 2. Construction du document utilisateur
+            # Construction du document utilisateur
             user_doc = {
                 'email': email,
                 'username': username,
@@ -70,7 +67,7 @@ class User:
                 'sexe': sexe,
                 'date_naissance': date_naissance,
                 'role': role,
-                'activated': True,
+                'activated': False,
                 'created_at': datetime.utcnow(),
                 'address': address,
                 'location': {
@@ -79,10 +76,16 @@ class User:
                 }
             }
 
-            # 3. Insertion sécurisée
+            # Insertion sécurisée
             #result = User._get_db().insert_one(user_doc)
             result = mongo.db.users.insert_one(user_doc)
-            return str(result.inserted_id)
+            user_id = str(result.inserted_id)
+            # user_id='6847f80e3714ecf817abd484'
+
+            # 5. Envoi de l'email de confirmation
+            User._send_confirmation_email(email, user_id)
+
+            return user_id
 
         except GeocoderTimedOut:
             current_app.logger.error("Service de géocodage indisponible")
@@ -90,8 +93,96 @@ class User:
         except Exception as e:
             current_app.logger.error(f"Erreur création utilisateur: {str(e)}")
             raise
+    
+    
+    
+    @staticmethod
+    def _send_confirmation_email(email, user_id):
+        """Génère un token et envoie l'email de confirmation."""
+        try:
+            serializer = get_serializer()
+            
+            # Génère le token
+            token = serializer.dumps(user_id, salt="email-confirm")
+            
+            # Crée le lien de confirmation
+            confirm_url = url_for('auth_register_mail', token=token, _external=True)
+            
+            # Rendre le template HTML
+            html_body = render_template('email_confirmation.html', confirm_url=confirm_url, current_year=datetime.now().year)
         
-#62157357
+
+            # Prépare l'email
+            msg = Message(
+                "Confirme ton email",
+                sender=current_app.config['MAIL_USERNAME'],
+                recipients=[email]
+            )
+             # Version HTML et texte brut (pour les clients mail simples)
+            msg.html = html_body
+            msg.body = f"""Bonjour,
+
+        Cliquez sur ce lien pour confirmer votre email :
+        {confirm_url}
+
+        Ce lien expirera dans 24 heures."""
+            # Envoie l'email
+            mail.send(msg)
+            current_app.logger.info(f"Email de confirmation envoyé à {email}")
+            
+        except Exception as e:
+            current_app.logger.error(f"Erreur lors de l'envoi à {email}: {str(e)}")
+            raise 
+
+    @staticmethod
+    def confirm_user(token):
+        """Valide le token et active le compte."""
+        #serializer = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+        try:
+            serializer = get_serializer()
+            user_id = serializer.loads(token, salt="email-confirm", max_age=1800)  # 24h
+            # Convertir en ObjectId si nécessaire (selon votre schéma MongoDB)
+            from bson import ObjectId
+            user_oid = ObjectId(user_id) if isinstance(user_id, str) else user_id
+            
+            # Vérifier si l'utilisateur existe et n'est pas déjà activé
+            user = mongo.db.users.find_one({"_id": user_oid})
+            
+            if not user:
+                current_app.logger.warning(f"Utilisateur non trouvé: {user_id}")
+                return False
+                
+            if user.get('activated'):
+                current_app.logger.warning(f"Token déjà utilisé pour l'utilisateur: {user_id}")
+                return False
+                
+            # Marquer comme activé et enregistrer la date de confirmation
+            result = mongo.db.users.update_one(
+                {"_id": user_oid},
+                {
+                    "$set": {
+                        "activated": True,
+                        "email_verified_at": datetime.utcnow(),
+                        "confirmation_token_used": True
+                    }
+                }
+            )
+            
+            if result.modified_count == 0:
+                current_app.logger.error(f"Échec de l'activation pour l'utilisateur: {user_id}")
+                return False
+                
+            current_app.logger.info(f"Compte confirmé avec succès: {user_id}")
+            return True
+            
+        except (SignatureExpired, BadSignature) as e:
+            current_app.logger.warning(f"Token invalide/expiré: {str(e)}")
+            return False
+        except Exception as e:
+            current_app.logger.error(f"Erreur confirmation user: {str(e)}")
+            raise
+
+    #62157357
     @staticmethod
     def find_by_email(email):
         """Trouve un utilisateur par email"""
@@ -131,6 +222,90 @@ class User:
             current_app.logger.error(f"Erreur recherche utilisateur: {str(e)}")
             return None
 
+
+    @staticmethod
+    def request_password_reset(email):
+        """
+        Initie une demande de réinitialisation de mot de passe
+        Retourne: (reset_token, user_id) ou None si l'email n'existe pas
+        """
+        email = email.lower().strip()
+        user = mongo.db.users.find_one({"email": email, "activated": True})
+        
+        if not user:
+            current_app.logger.info(f"Password reset request for non-existent email: {email}")
+            return None
+
+        serializer = get_serializer()
+        reset_token = serializer.dumps(str(user['_id']), salt='password-reset')
+        reset_expires = datetime.utcnow() + timedelta(hours=1)
+
+        mongo.db.users.update_one(
+            {"_id": user['_id']},
+            {"$set": {
+                "reset_token": reset_token,
+                "reset_expires": reset_expires
+            }}
+        )
+
+        return reset_token, str(user['_id'])
+    
+
+    @staticmethod
+    def validate_reset_token(token):
+        """
+        Valide un token de réinitialisation
+        Retourne: user_id si valide, None sinon
+        """
+        serializer = get_serializer()
+        try:
+            user_id = serializer.loads(token, salt='password-reset', max_age=3600)
+            user = mongo.db.users.find_one({
+                "_id": ObjectId(user_id),
+                "reset_token": token,
+                "reset_expires": {"$gt": datetime.utcnow()}
+            })
+            return str(user['_id']) if user else None
+        except (SignatureExpired, BadSignature):
+            return None
+        
+    @staticmethod
+    def reset_password(user_id, new_password):
+        """
+        Réinitialise le mot de passe d'un utilisateur
+        Retourne: True si succès, False sinon
+        """
+        hashed_password = generate_password_hash(new_password)
+        result = mongo.db.users.update_one(
+            {"_id": ObjectId(user_id)},
+            {"$set": {
+                "password": hashed_password,
+                "password_changed_at": datetime.utcnow()
+            },
+            "$unset": {
+                "reset_token": "",
+                "reset_expires": ""
+            }}
+        )
+        return result.modified_count > 0
+
+    @staticmethod
+    def send_reset_email(email, reset_url):
+        """Envoie l'email de réinitialisation"""
+        msg = Message(
+            "Réinitialisation de votre mot de passe LocDoc",
+            sender=current_app.config['MAIL_USERNAME'],
+            recipients=[email]
+        )
+        msg.html = render_template(
+            'password_reset_email.html',
+            reset_url=reset_url,
+            annee_courante=datetime.now().year
+        )
+        mail.send(msg)
+
+
+        
     @staticmethod
     def update_password(user_id, new_password):
         """Met à jour le mot de passe"""

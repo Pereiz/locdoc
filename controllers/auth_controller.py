@@ -1,5 +1,5 @@
 import os
-from flask import request, jsonify
+from flask import request, jsonify, current_app, url_for
 from flask_restx import Namespace, Resource, fields
 from flask_jwt_extended import create_access_token, get_jwt,jwt_required, get_jwt_identity, decode_token
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -7,7 +7,8 @@ from datetime import timedelta
 from models.user import User
 from utils.email import send_password_reset_email  # À implémenter
 from dotenv import load_dotenv
-from extensions import blacklist  # Importez la blacklist
+from extensions import blacklist, mail # Importez la blacklist
+from flask_mail import  Message
 
 load_dotenv()  # Charge les variables depuis .env
 
@@ -40,28 +41,28 @@ register_model = auth_ns.model('Register', {
     'longitude': fields.Float(required=False, example=2.3522),
     'latitude': fields.Float(required=False, example=48.8566)
 })
-# register_model1 = auth_ns.model('Register', {
-#     'email': fields.String(required=True, example='patient@locdoc.com'),
-#     'username' :fields.String(required=True, example='azonvidé'),
-#     'password': fields.String(required=True, example='MotDePasseSecure123!'),
-#     'first_name': fields.String(required=True, example='Gbèto'),
-#     'last_name': fields.String(required=True, example='YENONMON'),
-#     'date_naissance' : fields.String(required=True, example='01/10/1990'),
-#     'sexe' : fields.String(required=True, enum=['F','M'], example='M'),
-#     'telephone' : fields.String(required=True, description='Numéro de téléphone', example='0110111214'),
-#     'role': fields.List(fields.String(required=True, enum=['patient'], example='patient')),
-#     'address': fields.Nested(address_model, required=True),
-#     'longitude': fields.Float(required=False, example=2.3522),
-#     'latitude': fields.Float(required=False, example=48.8566)
-# })
-
-reset_request_model = auth_ns.model('ResetRequest', {
-    'email': fields.String(required=True, example='patient@locdoc.com')
+register_model1 = auth_ns.model('Register', {
+    'email': fields.String(required=True, example='donagoliag@gmail.com'),
+    'username' :fields.String(required=True, example='gbeto'),
+    'password': fields.String(required=True, example='MotDePasseSecure123!'),
+    'first_name': fields.String(required=True, example='Gbèto'),
+    'last_name': fields.String(required=True, example='YENONMON'),
+    'date_naissance' : fields.String(required=True, example='01/10/1990'),
+    'sexe' : fields.String(required=True, enum=['F','M'], example='M'),
+    'telephone' : fields.String(required=True, description='Numéro de téléphone', example='0110111214'),
+    'role': fields.List(fields.String(required=True, enum=['patient'], example='patient')),
+    'address': fields.Nested(address_model, required=True),
+    'longitude': fields.Float(required=False, example=2.3522),
+    'latitude': fields.Float(required=False, example=48.8566)
 })
 
-reset_password_model = auth_ns.model('ResetPassword', {
-    'token': fields.String(required=True),
-    'new_password': fields.String(required=True)
+reset_request_model = auth_ns.model('PasswordResetRequest', {
+    'email': fields.String(required=True, example='patient@locdoc.com', description="Votre mail pour recupérer votre mot de passe")
+})
+
+reset_password_model = auth_ns.model('PasswordReset', {
+    'new_password': fields.String(required=True, description="New password"),
+    'confirm_password': fields.String(required=True, description="Password confirmation")
 })
 logout_model = auth_ns.model('Logout', {
     'token': fields.String(required=True)
@@ -138,6 +139,16 @@ class Register(Resource):
             #current_app.logger.error(f"Erreur inscription: {str(e)}")
             return {"message": f"Erreur serveur {str(e)}"}, 500
 
+@auth_ns.route("/confirm/<token>")
+class RegisterMail(Resource):
+    def get(self, token):
+        try:
+            update_user =User.confirm_user(token)
+            return f"Compte activé avec succès ! {update_user}"
+        except Exception as e:
+            #current_app.logger.error(f"Erreur inscription: {str(e)}")
+            return {"message": f"Erreur d'activation {str(e)}"}, 500
+
 @auth_ns.route('/login')
 class Login(Resource):
     @auth_ns.expect(login_model)
@@ -172,52 +183,52 @@ class Login(Resource):
             'role': user['role']
         }, 200
 
-@auth_ns.route('/reset-password')
+@auth_ns.route('/request-password-reset')
 class PasswordResetRequest(Resource):
     @auth_ns.expect(reset_request_model)
     def post(self):
         """Request password reset"""
         data = request.get_json()
-        user = User.find_by_email(data['email'])
+        email = data.get('email').lower().strip()
+         # Appel à la couche métier
+        reset_data = User.request_password_reset(email)
         
-        if not user:
-            return {'message': 'If this email exists, a reset link has been sent'}, 200
+        # Même réponse si email existe ou non (sécurité)
+        if not reset_data:
+            return {'message': 'Si cet email existe, un lien a été envoyé'}, 200
 
-        # Générer un token de réinitialisation (simplifié)
-        reset_token = create_access_token(
-            identity=str(user['_id']),
-            expires_delta=timedelta(hours=1)
-        )
+        reset_token, user_id = reset_data
+        reset_url = url_for('api.password_reset', token=reset_token, _external=True)
+        
+        try:
+            User.send_reset_email(email, reset_url)
+            return {'message': 'Lien de réinitialisation envoyé'}, 200
+        except Exception as e:
+            current_app.logger.error(f"Erreur envoi email: {str(e)}")
+            return {'message': 'Erreur lors de l\'envoi du lien'}, 500
 
-        # Envoyer l'email (à implémenter)
-        send_password_reset_email(user['email'], reset_token)
-
-        return {'message': 'Password reset link sent'}, 200
 
 @auth_ns.route('/reset-password/<token>')
 class PasswordReset(Resource):
     @auth_ns.expect(reset_password_model)
     def post(self, token):
-        """Reset password with token"""
+        """Réinitialisation du mot de passe avec token"""
         data = request.get_json()
         
-        try:
-            # Vérifier le token (simplifié)
-            #from flask_jwt_extended import decode_token
-            decoded = decode_token(token)
-            user_id = decoded['sub']
-            
-            user = User.find_by_id(user_id)
-            if not user:
-                return {'message': 'Invalid token'}, 400
-
-            # Mettre à jour le mot de passe
-            hashed_password = generate_password_hash(data['new_password'])
-            User.update_password(user_id, hashed_password)
-
-            return {'message': 'Password updated successfully'}, 200
-        except:
-            return {'message': 'Invalid or expired token'}, 400
+        # Validation des mots de passe
+        if data['new_password'] != data['confirm_password']:
+            return {'message': 'Les mots de passe ne correspondent pas'}, 400
+        
+        # Vérification du token via la couche métier
+        user_id = User.validate_reset_token(token)
+        if not user_id:
+            return {'message': 'Lien invalide ou expiré'}, 400
+        
+        # Réinitialisation du mot de passe
+        if User.reset_password(user_id, data['new_password']):
+            return {'message': 'Mot de passe mis à jour avec succès'}, 200
+        else:
+            return {'message': 'Échec de la mise à jour du mot de passe'}, 400
 
 @auth_ns.route('/info/<string:identifier>')
 class UserResource(Resource):
@@ -254,13 +265,31 @@ class UserProfile(Resource):
             return {'message': 'Profil mis à jour avec succès'}, 200
         return {'message': 'Aucune modification effectuée'}, 400
 
-#@auth_ns.route('/protected')
+@auth_ns.route('/protected')
 class Protected(Resource):
     @jwt_required()
     def get(self):
         """Test protected route"""
         current_user = get_jwt_identity()
         return {'logged_in_as': current_user}, 200
+
+@auth_ns.route('/mail')
+class MailSend(Resource):
+    def post(self):
+        msg = Message(
+            subject="Test Mail Locdoc ",
+            sender=os.getenv("GMAIL_USER"),
+            recipients=["prime01@duck.com","donagoliag@gmail.com"],
+            body="""Prisci tu vas bien j'espère.
+            Je  suis entrain de tester l'envoi de mail avec le backend pour pouvoir
+            gérer la partie mot de passe oublié par mail. 
+            
+            Passe bonne nuit.
+            
+            Guillermo"""
+        )
+        mail.send(msg)
+        return "Email envoyé !"
 
 @auth_ns.route('/logout')
 class UserLogout(Resource):

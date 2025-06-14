@@ -59,6 +59,53 @@ class Doctor:
         
     #     return list(Doctor._get_collection().find(query).limit(limit))
     
+    @staticmethod
+    def list_all_doctors(limit=100):
+        """
+        Récupère la liste complète de tous les docteurs avec leurs informations utilisateur
+        :param limit: Nombre max de résultats (défaut: 100)
+        :return: Liste de tous les docteurs avec leurs infos utilisateur
+        """
+        try:
+            pipeline = [
+                # Jointure avec la collection user
+                {
+                    '$lookup': {
+                        'from': 'users',
+                        'localField': 'user_id',
+                        'foreignField': '_id',
+                        'as': 'user_info'
+                    }
+                },
+                
+                # Déplier le tableau user_info (1 docteur = 1 user)
+                {'$unwind': '$user_info'},
+                
+                # Limiter les résultats
+                {'$limit': limit},
+                
+                # Projection des champs nécessaires
+                {
+                    '$project': {
+                        'doctor_id': '$_id',
+                        'specialties': 1,
+                        'first_name': '$user_info.first_name',
+                        'last_name': '$user_info.last_name',
+                        'email': '$user_info.email',
+                        'telephone': '$user_info.telephone',
+                        'location': '$user_info.location',
+                        '_id': 0  # Exclure l'ID MongoDB par défaut
+                    }
+                }
+            ]
+
+            # Exécution de la requête
+            doctors = list(Doctor._get_collection().aggregate(pipeline))
+            return doctors
+
+        except Exception as e:
+            raise Exception(f"Erreur lors de la récupération des docteurs: {str(e)}")
+    
 
     @staticmethod
     def search(specialty=None, name=None, limit=10):

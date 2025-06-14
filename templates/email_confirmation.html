@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Confirmation d'email - LocDoc</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #F5F6FA;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #5F67C7 0%, #5F67C7 100%);
+            color: white;
+            padding: 30px 20px;
+            text-align: center;
+            border-radius: 15px 15px 0 0;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        .content {
+            padding: 30px;
+            color: #333333;
+            line-height: 1.6;
+        }
+        .button {
+            display: inline-block;
+            background-color: #5F67C7;
+            color: #FFFFFF !important;
+            padding: 14px 28px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: bold;
+            margin: 25px 0;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .button:hover {
+            background-color: #4A52B5;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        .footer {
+            /*background: linear-gradient(135deg, #A9A9E2 0%, #A9A9E2 100%);
+            */
+            padding: 20px;
+            font-size: 12px;
+            color: #747474;
+            text-align: center;
+            border-radius: 0 0 15px 15px;
+            border-top: 1px solid #E0E0E0;
+        }
+        .link {
+            color: #5F67C7;
+            word-break: break-all;
+            padding: 8px 12px;
+            border-radius: 4px;
+            display: inline-block;
+            margin: 10px 0;
+            font-size: 14px;
+        }
+        .logo {
+            font-weight: bold;
+            color: #5F67C7;
+            font-size: 14px;
+        }
+        .notice {
+            font-size: 11px;
+            color: #777777;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Confirmation de votre email</h1>
+        </div>
+        <div class="content">
+            <p>Bonjour,</p>
+            <p>Merci de vous être inscrit sur LocDoc. Pour activer votre compte, veuillez confirmer votre adresse email :</p>
+            
+            <center>
+                <a href="{{ confirm_url }}" class="button">CONFIRMER MON EMAIL</a>
+            </center>
+            
+            <p>Si le bouton ne fonctionne pas, copiez-collez ce lien dans votre navigateur :</p>
+            <p><a href="{{ confirm_url }}" class="link">{{ confirm_url }}</a></p>
+            
+            <p class="notice">Ce lien de confirmation expirera dans 24 heures.</p>
+        </div>
+        <div class="footer">
+            <p><span class="logo"></span> LocDoc - Votre plateforme de rendez-vous médicaux en ligne</p>
+            <p>© {{current_year}} LocDoc. Tous droits réservés.</p>
+        </div>
+    </div>
+</body>
+</html>

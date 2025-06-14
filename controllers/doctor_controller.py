@@ -59,6 +59,20 @@ doctor_model = doctor_ns.model('Doctor', {
         description='Note moyenne sur 5')
 })
 
+# Modèle pour la liste des docteurs
+doctor_model_list = doctor_ns.model('DoctorList', {
+    'doctor_id': fields.String(required=True, description='ID unique du docteur'),
+    'specialties': fields.List(fields.String, description='Liste des spécialités'),
+    'first_name': fields.String(required=True, description='Prénom'),
+    'last_name': fields.String(required=True, description='Nom'),
+    'email': fields.String(description='Email'),
+    'telephone': fields.String(description='Téléphone'),
+    'location': fields.Raw(description='Coordonnées géographiques', example={
+        'type': 'Point',
+        'coordinates': [2.352222, 48.856613]
+    })
+})
+
 
 search_model = doctor_ns.model('SearchParams', {
     'specialty': fields.String(required=False, description='Spécialité médicale'),
@@ -106,10 +120,12 @@ class DoctorSearch(Resource):
     
 @doctor_ns.route('/')
 class DoctorList(Resource):
-    @doctor_ns.marshal_list_with(doctor_model)
+    @doctor_ns.doc('list_doctors')
+    @doctor_ns.marshal_list_with(doctor_model_list)
+    @doctor_ns.response(500, 'Erreur serveur')
     def get(self):
         """Liste tous les médecins"""
-        return Doctor.search_doctors()
+        return Doctor.list_all_doctors()
 
     @doctor_ns.expect(doctor_model)
     def post(self):
