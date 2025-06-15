@@ -97,7 +97,7 @@ def welcome():
 api = Api(app, 
           version="1.0", 
           title="LocDoc API", 
-          description="API pour la gestion des rendez-vous médicaux",
+          description="API pour la gestion des rendez-vous médicaux et des discussions entre patients et doctors",
           doc="/locdoc/")
 
 # Ajout des namespaces
