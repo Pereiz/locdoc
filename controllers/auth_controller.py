@@ -145,7 +145,10 @@ class Register(Resource):
 
 @auth_ns.route("/confirm/<token>")
 class RegisterMail(Resource):
+    
     def get(self, token):
+        """ Cette route est pour la confirmation du mail.
+        Il faut l'appeler en passant le token"""
         try:
             update_user =User.confirm_user(token)
             return f"Compte activé avec succès ! {update_user}"
@@ -248,19 +251,19 @@ class PasswordResetRequest(Resource):
 @auth_ns.route('/reset-password/<token>')
 class PasswordReset(Resource):
      # Ajoutez cette méthode pour gérer les GET
-    def get(self, token):
-        """Affiche le formulaire de réinitialisation (pour le lien dans l'email)"""
-        # Vérifie d'abord si le token est valide
-        user_id = User.validate_reset_token(token)
-        if not user_id:
-            return {'message': 'Lien invalide ou expiré'}, 400
+    # def get(self, token):
+    #     """Affiche le formulaire de réinitialisation (pour le lien dans l'email)"""
+    #     # Vérifie d'abord si le token est valide
+    #     user_id = User.validate_reset_token(token)
+    #     if not user_id:
+    #         return {'message': 'Lien invalide ou expiré'}, 400
         
-        # Retourne une réponse simple ou redirigez vers une page frontend
-        return {
-            'message': 'Token valide',
-            'token': token,
-            'user_id': user_id
-        }, 200
+    #     # Retourne une réponse simple ou redirigez vers une page frontend
+    #     return {
+    #         'message': 'Token valide',
+    #         'token': token,
+    #         'user_id': user_id
+    #     }, 200
 
     @auth_ns.expect(reset_password_model)
     def post(self, token):
@@ -321,7 +324,7 @@ class UserProfile(Resource):
             return {'message': 'Profil mis à jour avec succès'}, 200
         return {'message': 'Aucune modification effectuée'}, 400
 
-@auth_ns.route('/protected')
+#@auth_ns.route('/protected')
 class Protected(Resource):
     @jwt_required()
     def get(self):
@@ -329,7 +332,7 @@ class Protected(Resource):
         current_user = get_jwt_identity()
         return {'logged_in_as': current_user}, 200
 
-@auth_ns.route('/mail')
+#@auth_ns.route('/mail')
 class MailSend(Resource):
     def post(self):
         msg = Message(

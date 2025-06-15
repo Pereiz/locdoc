@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API LocDoc</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #F3F7F3;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            text-align: center;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 800px;
+            padding: 2rem;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #5F67C7;
+            margin-bottom: 1.5rem;
+        }
+        .logo {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #5F67C7;
+            margin-bottom: 1rem;
+        }
+        .doc-link {
+            display: inline-block;
+            margin-top: 2rem;
+            padding: 12px 24px;
+            background-color: #5F67C7;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        .doc-link:hover {
+            background-color: #4A52B5;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .version {
+            margin-top: 2rem;
+            color: #747474;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        
+        <h1>Bienvenue sur l'API de LocDoc</h1>
+        
+        <p>Accédez à la documentation complète pour utiliser les endpoints disponibles :</p>
+        
+        <a href="/locdoc" class="doc-link">Accéder à la documentation</a>
+        
+        <div class="version">
+            <p>Version 1.0.0</p>
+            <p>© <span id="current-year"></span> LocDoc. Tous droits réservés.</p>
+        </div>
+    </div>
+
+    <script>
+        // Afficher l'année courante
+        document.getElementById('current-year').textContent = new Date().getFullYear();
+    </script>
+</body>
+</html>

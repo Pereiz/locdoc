@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, render_template
 from flask_restx import Api
 from dotenv import load_dotenv
 import os
@@ -86,6 +86,14 @@ def check_mongodb_connection(app):
 
 # Création de l'application
 app = create_app()
+
+
+@app.route('/')
+def welcome():
+    """Route d'accueil de l'API"""
+    return render_template('kwabo.html')
+
+
 api = Api(app, 
           version="1.0", 
           title="LocDoc API", 
@@ -98,6 +106,8 @@ api.add_namespace(doctor_ns)
 api.add_namespace(patient_ns)
 api.add_namespace(appointment_ns)
 api.add_namespace(msg_ns)
+
+
 
 
 port = int(os.environ.get("PORT", 5000))
