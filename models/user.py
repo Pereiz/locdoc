@@ -184,7 +184,7 @@ class User:
     @staticmethod
     def find_by_email(email):
         """Trouve un utilisateur par email"""
-        return User._get_db().find_one({'email': email, 'activated':True}, {'_id': 1, 'role': 1, 'email': 1, 'password': 1 })
+        return User._get_db().find_one({'email': email, 'activated':True})
 
     @staticmethod
     def find_by_id(user_id):

@@ -133,7 +133,9 @@ class Register(Resource):
                 latitude=data.get('latitude')
             )
             
-            return {"id": str(user_id)}, 201
+            return {"id": str(user_id),
+                    "message" : 'Allez dans votre mail pour finaliser votre processus de création de compte'
+                    }, 201
             
         except RuntimeError as e:
             return {"message": f"Erreur RuntimeError : {str(e)}"}, 500
@@ -185,9 +187,15 @@ class Login(Resource):
         )
 
         return {
+            "message" : "Vous êtes connecté(e) avec succès",
             'access_token': access_token,
             'user_id': str(user['_id']),
-            'role': user['role']
+            'role': user['role'],
+            "nom" : user['last_name'],
+            "prenom" : user['first_name'],
+            "telephone" : user['telephone'],
+            "username" : user['username']
+            
         }, 200
 
 @auth_ns.route('/deactivate-account')
