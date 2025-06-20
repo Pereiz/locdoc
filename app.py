@@ -93,12 +93,36 @@ def welcome():
     """Route d'accueil de l'API"""
     return render_template('kwabo.html')
 
+@jwt.unauthorized_loader
+def unauthorized_callback(callback):
+    return {'message': 'Token manquant ou invalide'}, 401
+
+@jwt.invalid_token_loader
+def invalid_token_callback(callback):
+    return {'message': 'Token invalide'}, 422
+
+@jwt.expired_token_loader
+def expired_token_callback(callback):
+    return {'message': 'Token expiré'}, 401
+
+authorizations = {
+    'Bearer Auth': {
+        'type': 'apiKey',
+        'in': 'header',
+        'name': 'Authorization',
+        'description': "Entrez 'Bearer <JWT>' (sans les guillemets)"
+    }
+}
+
 
 api = Api(app, 
-          version="1.0", 
-          title="LocDoc API", 
-          description="API pour la gestion des rendez-vous médicaux et des discussions entre patients et doctors",
-          doc="/locdoc/")
+        version="1.0", 
+        title="LocDoc API", 
+        description="API pour la gestion des rendez-vous médicaux et des discussions entre patients et doctors",
+        doc="/locdoc/",
+        authorizations=authorizations,  # Ajout de la config d'authentification
+        security='Bearer Auth'  # Sécurité globale
+        )
 
 # Ajout des namespaces
 api.add_namespace(auth_ns)
@@ -115,13 +139,17 @@ def add_cors_headers(response):
     response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
 
     response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
-    response.headers['Content-Security-Policy'] = (
-        "default-src 'self'; "
-        "script-src 'self' https://apis.google.com 'unsafe-inline'; "
-        "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; "
-        "font-src 'self' https://fonts.gstatic.com; "
-        "img-src 'self' data:; "
-    )
+    # response.headers['Content-Security-Policy'] = (
+    #     "default-src 'self'; "
+    #     "script-src 'self' https://apis.google.com 'unsafe-inline'; "
+    #     "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; "
+    #     "font-src 'self' https://fonts.gstatic.com; "
+    #     "img-src 'self' data:; "
+    # )
+    response.headers.add('Access-Control-Expose-Headers', 
+                        'Authorization')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'

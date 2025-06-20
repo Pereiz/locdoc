@@ -1,6 +1,9 @@
 from datetime import datetime, timedelta
 from bson import ObjectId
 from extensions import mongo
+from flask import current_app
+from models.doctor import Doctor
+from models.user import User
 
 class Appointment:
     @staticmethod
@@ -109,11 +112,14 @@ class Appointment:
             doctor_oid = ObjectId(doctor_id) if not isinstance(doctor_id, ObjectId) else doctor_id
 
             # 1. Récupérer les infos du médecin
-            doctor = Appointment._get_collection().find_one({"_id": doctor_oid})
+            doctor = Doctor.find_by_id(doctor_oid)
             if not doctor:
                 raise ValueError("Médecin non trouvé")
+            # print(doctor)
 
-            user = Appointment._get_collection().find_one({"_id": doctor["user_id"]})
+            user = User.find_by_id(doctor['user_id'])
+            # user = User.find_by_id("68497453b88eb5a79bb2b2c6")
+            
             if not user:
                 raise ValueError("Utilisateur associé non trouvé")
 
@@ -128,20 +134,23 @@ class Appointment:
                 "start_time": {"$gte": start_date, "$lte": end_date},
                 "status": {"$ne": "cancelled"}
             }))
+            
 
             # 4. Générer les créneaux disponibles
-            working_hours = doctor.get("working_hours", {})
+            working_hours = doctor.get("disponibilite", {})
             all_slots = Appointment.generate_time_slots(start_date, end_date, working_hours)
             booked_slots = [appt["start_time"] for appt in booked_appointments]
             available_slots = [slot for slot in all_slots if slot not in booked_slots]
+            print(booked_slots)
 
+            
             return {
                 "doctor": {
                     "id": str(doctor["_id"]),
                     "username": user.get("username"),
                     "first_name": user.get("first_name"),
                     "last_name": user.get("last_name"),
-                    "specialty": doctor.get("specialty")
+                    "specialties": doctor.get("specialties")
                 },
                 "available_slots": available_slots,
                 "booked_slots": booked_slots,
@@ -155,35 +164,69 @@ class Appointment:
             current_app.logger.error(f"Erreur disponibilité: {str(e)}")
             raise
     
-    @staticmethod
-    def generate_time_slots(start_date, end_date, working_hours):
-        """Génère les créneaux horaires"""
-        slots = []
-        current_day = start_date.date()
-        end_day = end_date.date()
-        
-        while current_day <= end_day:
-            day_name = current_day.strftime("%A").lower()
-            for time_range in working_hours.get(day_name, []):
-                start_time = datetime.combine(
-                    current_day, 
-                    datetime.strptime(time_range["start"], "%H:%M").time()
-                )
-                end_time = datetime.combine(
-                    current_day, 
-                    datetime.strptime(time_range["end"], "%H:%M").time()
-                )
-                
-                # Génération des créneaux de 30 minutes
-                while start_time < end_time:
-                    if start_time >= datetime.utcnow():  # Exclure les créneaux passés
-                        slots.append(start_time)
-                    start_time += timedelta(minutes=30)
-            
-            current_day += timedelta(days=1)
-        
-        return slots
+    
 
+    @staticmethod
+    def generate_time_slots(start_date_str, end_date_str, working_hours):
+        """Génère les créneaux horaires à partir des dates en string"""
+        try:
+            # Conversion des strings en datetime
+            start_date = datetime.strptime(start_date_str, "%Y-%m-%dT%H:%M:%S.%fZ")
+            end_date = datetime.strptime(end_date_str, "%Y-%m-%dT%H:%M:%S.%fZ")
+            
+            if start_date.date() > end_date.date():
+                raise ValueError("La date de départ ne doit pas être supérieure à la date de fin")
+            
+            slots = []
+            current_day = start_date.date()
+            end_day = end_date.date()
+            
+            while current_day <= end_day:
+                day_name_fr = {
+                    'Monday': 'lundi',
+                    'Tuesday': 'mardi',
+                    'Wednesday': 'mercredi',
+                    'Thursday': 'jeudi',
+                    'Friday': 'vendredi',
+                    'Saturday': 'samedi',
+                    'Sunday': 'dimanche'
+                }[current_day.strftime("%A")]
+                
+                day_data = working_hours.get(day_name_fr, {})
+                
+                if not day_data.get('available', False):
+                    current_day += timedelta(days=1)
+                    continue
+                
+                for period in ['morning', 'afternoon']:
+                    if period in day_data:
+                        try:
+                            period_data = day_data[period]
+                            start_time = datetime.combine(
+                                current_day,
+                                datetime.strptime(period_data['start'], "%H:%M").time()
+                            )
+                            end_time = datetime.combine(
+                                current_day,
+                                datetime.strptime(period_data['end'], "%H:%M").time()
+                            )
+                            
+                            # Génération des créneaux
+                            while start_time < end_time:
+                                if start_time >= datetime.utcnow():
+                                    slots.append(start_time.isoformat() + 'Z')
+                                start_time += timedelta(minutes=30)
+                        except (ValueError, KeyError) as e:
+                            current_app.logger.error(f"Erreur période {period}: {str(e)}")
+                            continue
+                
+                current_day += timedelta(days=1)
+            
+            return slots
+    
+        except Exception as e:
+            current_app.logger.error(f"Erreur génération créneaux: {str(e)}")
+            raise ValueError(f"Format de date invalide: {str(e)}")
 
 def generate_time_slots(start_date, end_date, working_hours):
     """

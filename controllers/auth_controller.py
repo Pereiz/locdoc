@@ -134,7 +134,7 @@ class Register(Resource):
             )
             
             return {"id": str(user_id),
-                    "message" : 'Allez dans votre mail pour finaliser votre processus de création de compte'
+                    "message" : f"Allez dans votre mail {data['email']} pour finaliser votre processus de création de compte"
                     }, 201
             
         except RuntimeError as e:
@@ -181,6 +181,7 @@ class Login(Resource):
 
         # Créer un token JWT
         access_token = create_access_token(
+            #identity={"id":str(user['_id']), "prenom":user['first_name'], "nom": user['last_name'],"role":user['role'], "username" : user['username'] },
             identity=str(user['_id']),
             expires_delta=timedelta(minutes=120),
             additional_claims={'role': user['role']}
@@ -334,6 +335,7 @@ class UserProfile(Resource):
 
 #@auth_ns.route('/protected')
 class Protected(Resource):
+    #@auth_ns.doc(security='Bearer Auth')
     @jwt_required()
     def get(self):
         """Test protected route"""

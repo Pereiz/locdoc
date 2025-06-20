@@ -68,7 +68,7 @@ class AppointmentResource(Resource):
         except ValueError as e:
             return {"message": str(e)}, 400
         except Exception as e:
-            return {"message": f"Erreur serveur {e}"}, 500
+            return {"message": f"Erreur serveur {e} -"}, 500
         
         if not Doctor.is_slot_available(doctor_schedule, data['slot']):
             return {'message': 'Créneau indisponible'}, 400
@@ -126,7 +126,7 @@ class AvailabilityResource(Resource):
         except ValueError as e:
             return {'message': str(e)}, 404
         except Exception as e:
-            return {'message': f"Erreur serveur {str(e)}"}, 500
+            return {'message': f"Erreur serveur {str(e)} -"}, 500
         
 
 @appointment_ns.route('/availability/<string:doctor_id>')
