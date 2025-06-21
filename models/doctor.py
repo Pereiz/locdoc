@@ -306,7 +306,27 @@ class Doctor:
         except Exception as e:
             raise Exception(f"Erreur lors de la recherche de médecins: {str(e)}")
     
-    
+    @staticmethod
+    def get_doctor_speciality(user_id) :
+        try:
+            if isinstance(user_id, str):
+                user_id = ObjectId(user_id)
+                
+            doctor = Doctor._get_collection().find_one(
+                {'user_id': user_id},
+                {'specialties': 1, '_id': 0}
+            )
+            print(doctor)
+            if not doctor or 'specialties' not in doctor:
+                raise ValueError("Médecin ou specialites non trouvés")
+                
+            return doctor['specialties']
+            
+        except Exception as e:
+            current_app.logger.error(f"Erreur récupération specialités: {str(e)}")
+            raise
+        
+
     @staticmethod
     def get_availability(doctor_id):
         """
@@ -335,3 +355,54 @@ class Doctor:
         except Exception as e:
             current_app.logger.error(f"Erreur récupération disponibilités: {str(e)}")
             raise
+    
+    @staticmethod
+    def get_availability_by_username_or_email(identifier):
+        """
+        Récupère les disponibilités d'un médecin par son username ou email
+        Args:
+            identifier: username ou email du médecin (str)
+        Returns:
+            dict: Disponibilités structurées
+        Raises:
+            ValueError: Si le médecin n'existe pas ou n'a pas de disponibilités
+        """
+        try:
+            # 1. Trouver l'utilisateur dans la collection users
+            user = mongo.db.users.find_one({
+                '$or': [
+                    {'username': identifier},
+                    {'email': identifier}
+                ],
+                'role': 'doctor'  # S'assurer que c'est bien un docteur
+            })
+
+            if not user:
+                raise ValueError("Aucun médecin trouvé avec cet identifiant")
+
+            # 2. Trouver le médecin dans la collection doctors
+            doctor = mongo.db.doctors.find_one({
+                '$or': [
+                    {'email': identifier},
+                    {'user_id': user['_id']}
+                ]
+            })
+
+            if not doctor or 'disponibilite' not in doctor:
+                raise ValueError("Disponibilités non trouvées pour ce médecin")
+
+            # 3. Retourner les disponibilités avec les infos de base
+            return {
+                'doctor_info': {
+                    'username': user.get('username'),
+                    'email': user.get('email'),
+                    'first_name': user.get('first_name'),
+                    'last_name': user.get('last_name'),
+                    'specialties': doctor.get('specialties', [])
+                },
+                'disponibilite': doctor['disponibilite']
+            }
+
+        except Exception as e:
+            current_app.logger.error(f"Erreur récupération disponibilités: {str(e)}")
+            raise ValueError(f"Erreur lors de la recherche: {str(e)}")

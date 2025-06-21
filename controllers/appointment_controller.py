@@ -1,5 +1,6 @@
 from flask_restx import Namespace, Resource, fields, reqparse
 from flask import request
+from flask_jwt_extended import create_access_token, get_jwt,jwt_required, get_jwt_identity
 from datetime import datetime
 from models.appointment import Appointment
 from models.doctor import Doctor
@@ -47,14 +48,18 @@ availability_model = appointment_ns.model('Availability', {
 class AppointmentResource(Resource):
     @appointment_ns.expect(appointment_model)
     #@appointment_ns.marshal_with(appointment_model, code=201)
+    #@jwt_required()
     def post(self):
+
         """Prendre un nouveau rendez-vous"""
         data = request.get_json()
-        
+        #current_user = get_jwt_identity()
+        current_user = "6847f80e3714ecf817abd484"
         # JE VEUX ME BASER SUR LA DISPONIBILITE DU DOCTEUR POUR CHOISIR LES DISPONIBILITE
         # Vérifier que le créneau est disponible
+        print(current_user)
         try:
-            doctor_schedule = Doctor.get_availability(data['doctor_id'])
+            doctor_schedule = Doctor.get_availability_by_username_or_email(data['doctor_id'])
             if not doctor_schedule:
                 return {"message": "Médecin non trouvé ou pas de disponibilités"}, 404
                 

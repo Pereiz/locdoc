@@ -5,6 +5,7 @@ from flask_jwt_extended import create_access_token, get_jwt,jwt_required, get_jw
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import timedelta
 from models.user import User
+from models.doctor import Doctor
 from utils.email import send_password_reset_email  # À implémenter
 from dotenv import load_dotenv
 from extensions import blacklist, mail # Importez la blacklist
@@ -187,11 +188,16 @@ class Login(Resource):
             additional_claims={'role': user['role']}
         )
 
+        specialite = []
+        if "doctor" in user['role']:
+            specialite = Doctor.get_doctor_speciality(user['_id'])
+
         return {
             "message" : "Vous êtes connecté(e) avec succès",
             'access_token': access_token,
             'user_id': str(user['_id']),
             'role': user['role'],
+            'specialites' : specialite,
             "nom" : user['last_name'],
             "prenom" : user['first_name'],
             "telephone" : user['telephone'],
