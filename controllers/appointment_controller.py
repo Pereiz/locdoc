@@ -57,15 +57,19 @@ class AppointmentResource(Resource):
         current_user = "6847f80e3714ecf817abd484"
         # JE VEUX ME BASER SUR LA DISPONIBILITE DU DOCTEUR POUR CHOISIR LES DISPONIBILITE
         # Vérifier que le créneau est disponible
-        print(current_user)
+        
         try:
-            doctor_schedule = Doctor.get_availability_by_username_or_email(data['doctor_id'])
+            # 1. Convertir les dates string en objets datetime
+            start_time = datetime.strptime(data['slot']['start'], "%Y-%m-%dT%H:%M:%S.%fZ")
+            end_time = datetime.strptime(data['slot']['end'], "%Y-%m-%dT%H:%M:%S.%fZ")
+
+            doctor_schedule = Doctor.get_doctor_by_username_or_email(data['doctor_id'])
             if not doctor_schedule:
                 return {"message": "Médecin non trouvé ou pas de disponibilités"}, 404
-                
             # Vérifiez si le créneau demandé est disponible
-            requested_day = data['date'].strftime('%A').lower()  # 'lundi', 'mardi'...
-            day_schedule = doctor_schedule.get(requested_day)
+            requested_day = start_time.strftime('%A').lower()  # 'lundi', 'mardi'...
+            day_schedule = doctor_schedule['disponibilite'].get(requested_day)
+            print(requested_day, day_schedule)
             
             if not day_schedule or not day_schedule.get('available'):
                 return {"message": "Le médecin n'est pas disponible ce jour"}, 400
@@ -73,7 +77,7 @@ class AppointmentResource(Resource):
         except ValueError as e:
             return {"message": str(e)}, 400
         except Exception as e:
-            return {"message": f"Erreur serveur {e} -"}, 500
+            return {"message": f"Erreur serveur {e}"}, 500
         
         if not Doctor.is_slot_available(doctor_schedule, data['slot']):
             return {'message': 'Créneau indisponible'}, 400

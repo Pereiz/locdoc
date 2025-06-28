@@ -357,7 +357,7 @@ class Doctor:
             raise
     
     @staticmethod
-    def get_availability_by_username_or_email(identifier):
+    def get_doctor_by_username_or_email(identifier):
         """
         Récupère les disponibilités d'un médecin par son username ou email
         Args:
@@ -393,7 +393,7 @@ class Doctor:
 
             # 3. Retourner les disponibilités avec les infos de base
             return {
-                'doctor_info': {
+                'doctor': {
                     'username': user.get('username'),
                     'email': user.get('email'),
                     'first_name': user.get('first_name'),
